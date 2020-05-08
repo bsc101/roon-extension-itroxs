@@ -1,9 +1,9 @@
 ## Roon Extension for Android App it'roXs!
 
-This extension is needed by the Android app it'roXs. You can find the app in the Google Play Store:
+This extension is needed by the Android app **it'roXs**. You can find the app in the Google Play Store:
 [it'roXs - eXtends your Roon music player](https://play.google.com/store/apps/details?id=com.bsc101.itroxs)
 
-Main features of it'roXs:
+Main features of the **it'roXs** Android app:
 
    * Adds a media notification for a Roon output to the status bar and lock screen
    * Shows current title meta data on the lock screen
@@ -48,13 +48,12 @@ Main features of it'roXs:
     ```bash
     node .
     ```
-
     The extension should appear in Roon now. Go to Settings->Extensions and you should see it in the list. Enable the extension.
 
 7. Extension settings:
 
     This extension makes a server available to the app, the default listening port is 8090. You can change the port in the extension settings.
-    You will have to enter the IP address and port of the server provided by this extension in the settings of the app.
+    You will have to enter the IP address and port of the server provided by this extension in the settings page of the **it'roXs** app.
 
 ## Firewall
 
