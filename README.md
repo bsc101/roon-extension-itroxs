@@ -1,4 +1,4 @@
-## Roon Extension for Android App it'roXs
+## Roon Extension for Android App it'roXs!
 
 This extension is still under construction!
 
