@@ -7,7 +7,7 @@ var RoonApi          = require('node-roon-api'),
     RoonApiBrowse    = require('node-roon-api-browse'),
     RoonApiTransport = require('node-roon-api-transport');
 
-var debug       = require('debug')('roonUp!');
+var debug       = require('debug')('it\'roXs!');
 var nodeCleanup = require('node-cleanup');
 
 var http = require("http");
@@ -19,18 +19,18 @@ var roondata = {};
 var instance = "";
 var instance_display_name = "";
 
-var ext_id      = 'com.bsc101.roonup';
-var ext_version = '0.0.2';
+var ext_id      = 'com.bsc101.itroxs';
+var ext_version = '0.1.0';
 
 init();
 
 var roon = new RoonApi({
     extension_id:        ext_id + instance,
-    display_name:        "Extension for Android App 'roonUp!'" + instance_display_name,
+    display_name:        "Extension for Android App it'roXs!" + instance_display_name,
     display_version:     ext_version,
     publisher:           'Boris Schaedler',
     email:               'dev@bsc101.eu',
-    website:             'https://github.com/bsc101/roon-extension-roonup',
+    website:             'https://github.com/bsc101/roon-extension-itroxs',
     set_persisted_state: function(state)
     {
         this.save_config("roonstate" + instance, state);

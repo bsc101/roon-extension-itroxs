@@ -1,4 +1,4 @@
-## Roon Extension for Android App 'roonUp!' (coming soon)
+## Roon Extension for Android App it'roXs
 
 This extension is still under construction!
 
@@ -16,7 +16,7 @@ This extension is still under construction!
 
 3. Download this project
 
-   * Go to the [roon-extension-roonup](https://github.com/bsc101/roon-extension-roonup) page on [GitHub](https://github.com).
+   * Go to the [roon-extension-itroxs](https://github.com/bsc101/roon-extension-itroxs) page on [GitHub](https://github.com).
    * Click the green 'Clone or Download' button and select 'Download ZIP'.
 
 4. Extract the zip file in a local folder
@@ -24,7 +24,7 @@ This extension is still under construction!
 5. Change directory to the extension in the local folder
 
     ```
-    cd <local_folder>/roon-extension-roonup
+    cd <local_folder>/roon-extension-itroxs
     ```
     *Replace `<local_folder>` with the local folder path.*
 
