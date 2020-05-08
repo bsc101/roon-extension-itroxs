@@ -7,7 +7,7 @@ Main features of the **it'roXs** Android app:
 
    * Adds a media notification for a Roon output to the status bar and lock screen
    * Shows current title meta data on the lock screen
-   * Controls the volume of a Roon output with the volume hardware buttons of your device
+   * Controls the volume of a Roon output with the volume hardware buttons of your device (if the volume of the selected output can be controlled through Roon, of course)
 
 ## Installation
 
@@ -50,7 +50,7 @@ Main features of the **it'roXs** Android app:
     ```
     The extension should appear in Roon now. Go to Settings->Extensions and you should see it in the list. Enable the extension.
 
-7. Extension settings:
+7. Extension settings
 
     This extension makes a server available to the app, the default listening port is 8090. You can change the port in the extension settings.
     You will have to enter the IP address and port of the server provided by this extension in the settings page of the **it'roXs** app.
