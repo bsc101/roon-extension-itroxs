@@ -1,0 +1,23 @@
+{
+  "name": "roon-extension-roonup",
+  "version": "0.0.2",
+  "description": "Roon Extension for Android App 'roonUp!'",
+  "main": "app.js",
+  "author": "Boris Schaedler",
+  "license": "MIT",
+  "dependencies": {
+    "debug": "^3.1.0",
+    "node-cleanup": "^2.1.2",
+    "websocket": "^1.0.31",
+    "node-roon-api": "github:roonlabs/node-roon-api",
+    "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
+    "node-roon-api-status": "github:roonlabs/node-roon-api-status",
+    "node-roon-api-image": "github:roonlabs/node-roon-api-image",
+    "node-roon-api-browse": "github:roonlabs/node-roon-api-browse",
+    "node-roon-api-transport": "github:roonlabs/node-roon-api-transport"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bsc101/roon-extension-roonup.git"
+  }
+}
