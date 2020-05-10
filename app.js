@@ -20,7 +20,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.1.0';
+var ext_version = '0.2.0';
 
 init();
 
@@ -345,61 +345,67 @@ function handleMessageIn(conn, msgIn)
 {
     debug('handleMessageIn: msgIn = ' + JSON.stringify(msgIn));
 
-    if (msgIn.command == "get_image")
+    switch (msgIn.command)
     {
-        let size = msgIn.image_size || 256;
-        roondata.image.get_image(msgIn.image_key, { scale: "fit", width: size, height: size, format: "image/jpeg" }, function(msg, contentType, body)
-        {
+        case "get_image":
+            let size = msgIn.image_size || 256;
+            roondata.image.get_image(msgIn.image_key, { scale: "fit", width: size, height: size, format: "image/jpeg" }, function(msg, contentType, body)
+            {
+                let msgOut = {
+                    command: 'set_image',
+                    timestamp: Date.now(),
+                    image: {
+                        image_key: msgIn.image_key,
+                        content_type: contentType,
+                        body: body
+                    }
+                };
+                conn.sendUTF(JSON.stringify(msgOut));
+            });
+            break;
+
+        case "set_volume":
+            msgIn.set_volumes.forEach(e => 
+            {
+                roondata.transport.change_volume(e.output_id, 'absolute', e.value);
+            });
+            break;
+
+        case "get_zone":
+            let now = Date.now();
             let msgOut = {
-                command: 'set_image',
-                timestamp: Date.now(),
-                image: {
-                    image_key: msgIn.image_key,
-                    content_type: contentType,
-                    body: body
-                }
+                command: 'zones_changed',
+                timestamp: now,
+                zones: []
             };
+            let zone = roondata.transport.zone_by_zone_id(msgIn.zone_id);
+            if (zone)
+            {
+                zone.timestamp = now;
+                msgOut.zones.push(zone);
+            }
             conn.sendUTF(JSON.stringify(msgOut));
-        });
-    }
-    else if (msgIn.command == "set_volume")
-    {
-        msgIn.set_volumes.forEach(e => 
-        {
-            roondata.transport.change_volume(e.output_id, 'absolute', e.value);
-        });
-    }
-    else if (msgIn.command == "get_zone")
-    {
-        let now = Date.now();
-        let msgOut = {
-            command: 'zones_changed',
-            timestamp: now,
-            zones: []
-        };
-        let zone = roondata.transport.zone_by_zone_id(msgIn.zone_id);
-        if (zone)
-        {
-            zone.timestamp = now;
-            msgOut.zones.push(zone);
-        }
-        conn.sendUTF(JSON.stringify(msgOut));
-    }
-    else if (msgIn.command == "play")
-    {
-        roondata.transport.control(msgIn.zone_id, "play");
-    }
-    else if (msgIn.command == "pause")
-    {
-        roondata.transport.control(msgIn.zone_id, "pause");
-    }
-    else if (msgIn.command == "next")
-    {
-        roondata.transport.control(msgIn.zone_id, "next");
-    }
-    else if (msgIn.command == "prev")
-    {
-        roondata.transport.control(msgIn.zone_id, "previous");
+            break;
+
+        case "play":
+            roondata.transport.control(msgIn.zone_id, "play");
+            break;
+
+        case "pause":
+            roondata.transport.control(msgIn.zone_id, "pause");
+            break;
+
+        case "next":
+            roondata.transport.control(msgIn.zone_id, "next");
+            break;
+
+        case "prev":
+            roondata.transport.control(msgIn.zone_id, "previous");
+            break;
+
+        case "standby":
+            roondata.transport.standby(msgIn.output_id, {});
+            break;
     }
 }
 
