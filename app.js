@@ -20,7 +20,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.2.0';
+var ext_version = '0.2.1';
 
 init();
 
@@ -144,7 +144,7 @@ var roon = new RoonApi({
     {
         debug("core_unpaired...");
 
-        roonservices = {};
+        roondata = {};
 
         stop_service();
     }
@@ -246,6 +246,12 @@ function init()
 
 function stop_service()
 {
+    if (service.keep_alive_timer)
+    {
+        clearTimeout(service.keep_alive_timer)
+        service.keep_alive_timer = null;
+    }
+
     if (service.server)
     {
         debug("stopping websocketserver...")
@@ -262,12 +268,31 @@ function stop_service()
     svc_status.set_status("Service Not Running", false);
 }
 
+function keep_alive()
+{
+    debug('keep_alive...');
+
+    if (roondata && roondata.core && service.connections)
+    {
+        let now = Date.now();
+        let msgOut = {
+            command: 'zones_seek_changed',
+            timestamp: now,
+        };
+        service.connections.forEach(c => c.sendUTF(JSON.stringify(msgOut)));
+
+        service.keep_alive_timer = setTimeout(keep_alive, 10000);
+    }
+}
+
 function start_service() 
 {
     stop_service();
 
     if (!mysettings.port)
         return;
+
+    service.keep_alive_timer = setTimeout(keep_alive, 10000);
 
     debug('starting websocketserver...');
 
