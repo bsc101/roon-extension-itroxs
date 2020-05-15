@@ -20,7 +20,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.2.1';
+var ext_version = '0.3.0';
 
 init();
 
@@ -292,7 +292,7 @@ function start_service()
     if (!mysettings.port)
         return;
 
-    service.keep_alive_timer = setTimeout(keep_alive, 10000);
+    // service.keep_alive_timer = setTimeout(keep_alive, 10000);
 
     debug('starting websocketserver...');
 
@@ -410,6 +410,23 @@ function handleMessageIn(conn, msgIn)
                 msgOut.zones.push(zone);
             }
             conn.sendUTF(JSON.stringify(msgOut));
+            break;
+
+        case "change_settings":
+            let settings = {};
+            if (msgIn.settings_shuffle)
+            {
+                settings.shuffle = msgIn.settings_shuffle.shuffle;
+            }
+            if (msgIn.settings_loop)
+            {
+                settings.loop = msgIn.settings_loop.loop;
+            }
+            if (msgIn.settings_radio)
+            {
+                settings.auto_radio = msgIn.settings_radio.auto_radio;
+            }
+            roondata.transport.change_settings(msgIn.zone_id, settings);
             break;
 
         case "play":
