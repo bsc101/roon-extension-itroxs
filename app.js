@@ -20,7 +20,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.3.0';
+var ext_version = '0.4.0';
 
 init();
 
@@ -389,13 +389,27 @@ function handleMessageIn(conn, msgIn)
             });
             break;
 
+        case "set_volumes":
+            msgIn.set_volumes.forEach(e => 
+            {
+                if (e.absolute)
+                {
+                    roondata.transport.change_volume(e.output_id, 'absolute', e.value);
+                }
+                else if (e.value == +1 || e.value == -1)
+                {
+                    roondata.transport.change_volume(e.output_id, 'relative', e.value);
+                }
+            });
+            break;
+
         case "set_volume":
             msgIn.set_volumes.forEach(e => 
             {
                 roondata.transport.change_volume(e.output_id, 'absolute', e.value);
             });
             break;
-
+    
         case "get_zone":
             let now = Date.now();
             let msgOut = {
