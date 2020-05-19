@@ -7,20 +7,23 @@ var RoonApi          = require('node-roon-api'),
     RoonApiBrowse    = require('node-roon-api-browse'),
     RoonApiTransport = require('node-roon-api-transport');
 
-var debug       = require('debug')('it\'roXs!');
-var nodeCleanup = require('node-cleanup');
+var debug            = require('debug')('it\'roXs!');
+var nodeCleanup      = require('node-cleanup');
 
-var http = require("http");
-var WebSocketServer = require('websocket').server;
+var http             = require("http");
+var WebSocketServer  = require('websocket').server;
+
 var service = {};
-
 var roondata = {};
 
 var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.4.0';
+var ext_version = '0.4.1';
+
+var subscribe_delay = 1000;
+var subscribe_timer = null;
 
 init();
 
@@ -48,107 +51,127 @@ var roon = new RoonApi({
         roondata.transport = core.services.RoonApiTransport;
         roondata.image = core.services.RoonApiImage;
 
-        roondata.transport.subscribe_zones(function(response, data)
+        subscribe_timer = setTimeout(() => 
         {
-            debug("response = " + response);
-
-            if (response == "Subscribed") 
-            {
-                roondata.zone_ids = [];
-                roondata.zones_seek = [];
-                data.zones.forEach(e => roondata.zone_ids.push(e.zone_id));
-                debug("zone_ids = " + roondata.zone_ids.toString())
-
-                updateZonesSeek();
-            }
-            else if (response == "Changed")
-            {
-                let send = false;
-
-                if (data.zones_changed)
-                {
-                    send = true;
-                }
-
-                if (data.zones_added)
-                {
-                    send = true;
-                    data.zones_added.forEach(e => 
-                    {
-                        if (!roondata.zone_ids.includes(e.zone_id))
-                            roondata.zone_ids.push(e.zone_id)
-                    });
-                }
-
-                if (data.zones_removed)
-                {
-                    send = true;
-                    data.zones_removed.forEach(zid => 
-                    {
-                        let idx = roondata.zone_ids.indexOf(zid);
-                        debug('removing zone: idx = ' + idx + ', zone_id = ' + zid);
-                        if (idx >= 0)
-                        {
-                            roondata.zone_ids.splice(idx, 1);
-                        }
-                    });
-                }
-
-                if (data.zones_seek_changed && !data.zones_changed)
-                {
-                    data.zones_seek_changed.forEach(z => 
-                    {
-                        roondata.zones_seek.forEach(e => 
-                        {
-                            if (e.zone_id == z.zone_id)
-                            {
-                                if (Math.abs(z.seek_position - e.seek_position) > 1)
-                                {
-                                    debug('zone_id:  ' + e.zone_id);
-                                    debug('seek_pos: ' + e.seek_position + ' -> ' + z.seek_position);
-                                    send = true;
-                                }
-                            }
-                        });
-                    });
-                }
-
-                if (send)
-                {
-                    let now = Date.now();
-                    let msgOut = {
-                        command: 'zones_changed',
-                        timestamp: now,
-                        zones: [],
-                        zones_removed: data.zones_removed
-                    };
-                    if (roondata.zone_ids)
-                    {
-                        roondata.zone_ids.forEach(zid => 
-                        {
-                            let zone = roondata.transport.zone_by_zone_id(zid);
-                            zone.timestamp = now;
-                            msgOut.zones.push(zone);
-                        });
-                    }
-                    service.connections.forEach(c => c.sendUTF(JSON.stringify(msgOut)));
-                }
-
-                updateZonesSeek();
-            }
-        });
-
-        start_service();
+            subscribe_zones();
+        }, subscribe_delay);
     },
     core_unpaired: function(core) 
     {
         debug("core_unpaired...");
 
+        if (subscribe_timer)
+        {
+            clearTimeout(subscribe_timer);
+            subscribe_timer = null;
+        }
+
         roondata = {};
+        subscribe_delay = 12000;
 
         stop_service();
     }
 });
+
+function subscribe_zones()
+{
+    if (!roondata.transport) return;
+
+    subscribe_timer = null;
+
+    roondata.transport.subscribe_zones(function(response, data)
+    {
+        debug("response = " + response);
+
+        if (response == "Subscribed") 
+        {
+            roondata.zone_ids = [];
+            roondata.zones_seek = [];
+
+            data.zones.forEach(e => roondata.zone_ids.push(e.zone_id));
+            debug("zone_ids = " + roondata.zone_ids.toString())
+
+            updateZonesSeek();
+
+            start_service();
+        }
+        else if (response == "Changed")
+        {
+            let send = false;
+
+            if (data.zones_changed)
+            {
+                send = true;
+            }
+
+            if (data.zones_added)
+            {
+                send = true;
+                data.zones_added.forEach(e => 
+                {
+                    if (!roondata.zone_ids.includes(e.zone_id))
+                        roondata.zone_ids.push(e.zone_id)
+                });
+            }
+
+            if (data.zones_removed)
+            {
+                send = true;
+                data.zones_removed.forEach(zid => 
+                {
+                    let idx = roondata.zone_ids.indexOf(zid);
+                    debug('removing zone: idx = ' + idx + ', zone_id = ' + zid);
+                    if (idx >= 0)
+                    {
+                        roondata.zone_ids.splice(idx, 1);
+                    }
+                });
+            }
+
+            if (data.zones_seek_changed && !data.zones_changed)
+            {
+                data.zones_seek_changed.forEach(z => 
+                {
+                    roondata.zones_seek.forEach(e => 
+                    {
+                        if (e.zone_id == z.zone_id)
+                        {
+                            if (Math.abs(z.seek_position - e.seek_position) > 1)
+                            {
+                                debug('zone_id:  ' + e.zone_id);
+                                debug('seek_pos: ' + e.seek_position + ' -> ' + z.seek_position);
+                                send = true;
+                            }
+                        }
+                    });
+                });
+            }
+
+            if (send)
+            {
+                let now = Date.now();
+                let msgOut = {
+                    command: 'zones_changed',
+                    timestamp: now,
+                    zones: [],
+                    zones_removed: data.zones_removed
+                };
+                if (roondata.zone_ids)
+                {
+                    roondata.zone_ids.forEach(zid => 
+                    {
+                        let zone = roondata.transport.zone_by_zone_id(zid);
+                        zone.timestamp = now;
+                        msgOut.zones.push(zone);
+                    });
+                }
+                service.connections.forEach(c => c.sendUTF(JSON.stringify(msgOut)));
+            }
+
+            updateZonesSeek();
+        }
+    });
+}
 
 function updateZonesSeek()
 {
@@ -332,14 +355,17 @@ function start_service()
         conn.on('close', function(reason, description)
         {
             debug('CONN: close...');
-            debug('connections.length = ' + service.connections.length);
-            var idx = service.connections.indexOf(conn);
-            debug('idx = ' + idx);
-            if (idx >= 0)
+            if (service.connections)
             {
-                service.connections.splice(idx, 1);
+                debug('connections.length = ' + service.connections.length);
+                var idx = service.connections.indexOf(conn);
+                debug('idx = ' + idx);
+                if (idx >= 0)
+                {
+                    service.connections.splice(idx, 1);
+                }
+                debug('connections.length = ' + service.connections.length);
             }
-            debug('connections.length = ' + service.connections.length);
         });
 
         let now = Date.now();
