@@ -7,11 +7,8 @@ var RoonApi          = require('node-roon-api'),
     RoonApiBrowse    = require('node-roon-api-browse'),
     RoonApiTransport = require('node-roon-api-transport');
 
-var debug            = require('debug')('it\'roXs!');
 var nodeCleanup      = require('node-cleanup');
-
-var http             = require("http");
-var WebSocketServer  = require('websocket').server;
+var WebSocket        = require('ws');
 
 var service = {};
 var roondata = {};
@@ -20,12 +17,17 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.4.1';
+var ext_version = '0.5.0';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
 
 init();
+
+function debug(msg)
+{
+    console.log('#itroxs: ' + msg);
+};
 
 var roon = new RoonApi({
     extension_id:        ext_id + instance,
@@ -165,7 +167,7 @@ function subscribe_zones()
                         msgOut.zones.push(zone);
                     });
                 }
-                service.connections.forEach(c => c.sendUTF(JSON.stringify(msgOut)));
+                service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
             }
 
             updateZonesSeek();
@@ -190,8 +192,7 @@ function updateZonesSeek()
 }
 
 var mysettings = roon.load_config("settings" + instance) || {
-    port: "8090",
-    id: Math.floor(Math.random() * 65536)
+    port: "8090"
 };
 
 function make_layout(settings) {
@@ -224,13 +225,7 @@ var svc_settings = new RoonApiSettings(roon, {
 
         if (!isdryrun && !l.has_error) 
         {
-            if (!mysettings.id)
-                mysettings.id = Math.floor(Math.random() * 65536);
-            let _name = mysettings.displayname;
-            let _id = mysettings.id;
-
             mysettings = l.values;
-            mysettings.id = _name == mysettings.displayname ? _id : Math.floor(Math.random() * 65536);
 
             svc_settings.update_settings(l);
             roon.save_config("settings" + instance, mysettings);
@@ -251,7 +246,7 @@ function init()
 {
     process.argv.forEach(function (val, index, array)
     {
-        debug(index + ': ' + val);
+        // debug(index + ': ' + val);
 
         if (val.startsWith("-inst:"))
         {
@@ -259,7 +254,7 @@ function init()
             if (inst)
             {
                 instance = "." + inst;
-                debug('instance = %s', instance);
+                // debug('instance = %s', instance);
 
                 instance_display_name = " (" + inst + ")";
             }
@@ -275,14 +270,12 @@ function stop_service()
         service.keep_alive_timer = null;
     }
 
-    if (service.server)
+    if (service.wss)
     {
         debug("stopping websocketserver...")
 
-        service.wss.shutDown();
+        service.wss.close();
         service.wss = null;
-        service.server.close();
-        service.server = null;
         service.connections = null;
 
         debug("stopping websocketserver... done")
@@ -293,7 +286,7 @@ function stop_service()
 
 function keep_alive()
 {
-    debug('keep_alive...');
+    // debug('keep_alive...');
 
     if (roondata && roondata.core && service.connections)
     {
@@ -302,7 +295,7 @@ function keep_alive()
             command: 'zones_seek_changed',
             timestamp: now,
         };
-        service.connections.forEach(c => c.sendUTF(JSON.stringify(msgOut)));
+        service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
 
         service.keep_alive_timer = setTimeout(keep_alive, 10000);
     }
@@ -320,41 +313,25 @@ function start_service()
     debug('starting websocketserver...');
 
     service.connections = [];
-    service.server = http.createServer(function(request, response) 
-    {
-        debug('received request for ' + request.url);
-        response.writeHead(404);
-        response.end();
-    });
-    service.server.listen(mysettings.port, function() 
-    {
-        debug('server is listening on port ' + mysettings.port);
 
-        svc_status.set_status("Service Running", false);
-    });
-    service.wss = new WebSocketServer({
-        httpServer: service.server,
-        autoAcceptConnections: false
-    });
-    service.wss.on('request', function(request)
-    {
-        debug('WSS: request...');
-        request.accept(null, request.origin);
-    });
-    service.wss.on('connect', function(conn)
+    service.wss = new WebSocket.Server({ port: mysettings.port });
+
+    service.wss.on('connection', (conn) => 
     {
         debug('WSS: connect...');
 
         service.connections.push(conn);
 
-        conn.on('message', function(message)
+        conn.on('message', (message) => 
         {
-            let msgIn = JSON.parse(message.utf8Data);
+            debug('WS: received: ' + message);
+
+            let msgIn = JSON.parse(message);
             handleMessageIn(conn, msgIn);
         });
-        conn.on('close', function(reason, description)
+        conn.on('close', () => 
         {
-            debug('CONN: close...');
+            debug('WS: close...');
             if (service.connections)
             {
                 debug('connections.length = ' + service.connections.length);
@@ -378,7 +355,6 @@ function start_service()
         };
         if (roondata.zone_ids)
         {
-            // debug("zone_ids = " + roondata.zone_ids.toString())
             roondata.zone_ids.forEach(zid => 
             {
                 let zone = roondata.transport.zone_by_zone_id(zid);
@@ -386,33 +362,35 @@ function start_service()
                 msgOut.zones.push(zone);
             });
         }
-        conn.sendUTF(JSON.stringify(msgOut));
+        conn.send(JSON.stringify(msgOut));
     });
+
+    svc_status.set_status("Service Running", false);
 
     debug('starting websocketserver... done');
 }
 
 function handleMessageIn(conn, msgIn)
 {
-    debug('handleMessageIn: msgIn = ' + JSON.stringify(msgIn));
-
     switch (msgIn.command)
     {
         case "get_image":
-            let size = msgIn.image_size || 256;
-            roondata.image.get_image(msgIn.image_key, { scale: "fit", width: size, height: size, format: "image/jpeg" }, function(msg, contentType, body)
             {
-                let msgOut = {
-                    command: 'set_image',
-                    timestamp: Date.now(),
-                    image: {
-                        image_key: msgIn.image_key,
-                        content_type: contentType,
-                        body: body
-                    }
-                };
-                conn.sendUTF(JSON.stringify(msgOut));
-            });
+                let size = msgIn.image_size || 256;
+                roondata.image.get_image(msgIn.image_key, { scale: "fit", width: size, height: size, format: "image/jpeg" }, function(msg, contentType, body)
+                {
+                    let msgOut = {
+                        command: 'set_image',
+                        timestamp: Date.now(),
+                        image: {
+                            image_key: msgIn.image_key,
+                            content_type: contentType,
+                            body: body
+                        }
+                    };
+                    conn.send(JSON.stringify(msgOut));
+                });
+            }
             break;
 
         case "set_volumes":
@@ -437,36 +415,49 @@ function handleMessageIn(conn, msgIn)
             break;
     
         case "get_zone":
-            let now = Date.now();
-            let msgOut = {
-                command: 'zones_changed',
-                timestamp: now,
-                zones: []
-            };
-            let zone = roondata.transport.zone_by_zone_id(msgIn.zone_id);
-            if (zone)
             {
-                zone.timestamp = now;
-                msgOut.zones.push(zone);
+                let msgOut = {
+                    command: 'zones_changed',
+                    timestamp: Date.now(),
+                    zones: []
+                };
+                let zone = roondata.transport.zone_by_zone_id(msgIn.zone_id);
+                if (zone)
+                {
+                    zone.timestamp = Date.now(),
+                    msgOut.zones.push(zone);
+                }
+                conn.send(JSON.stringify(msgOut));
             }
-            conn.sendUTF(JSON.stringify(msgOut));
+            break;
+
+        case "keep_alive":
+            {
+                let msgOut = {
+                    command: 'keep_alive',
+                    timestamp: Date.now(),
+                };
+                conn.send(JSON.stringify(msgOut));
+            }
             break;
 
         case "change_settings":
-            let settings = {};
-            if (msgIn.settings_shuffle)
             {
-                settings.shuffle = msgIn.settings_shuffle.shuffle;
+                let settings = {};
+                if (msgIn.settings_shuffle)
+                {
+                    settings.shuffle = msgIn.settings_shuffle.shuffle;
+                }
+                if (msgIn.settings_loop)
+                {
+                    settings.loop = msgIn.settings_loop.loop;
+                }
+                if (msgIn.settings_radio)
+                {
+                    settings.auto_radio = msgIn.settings_radio.auto_radio;
+                }
+                roondata.transport.change_settings(msgIn.zone_id, settings);
             }
-            if (msgIn.settings_loop)
-            {
-                settings.loop = msgIn.settings_loop.loop;
-            }
-            if (msgIn.settings_radio)
-            {
-                settings.auto_radio = msgIn.settings_radio.auto_radio;
-            }
-            roondata.transport.change_settings(msgIn.zone_id, settings);
             break;
 
         case "play":

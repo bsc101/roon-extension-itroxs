@@ -1,11 +1,13 @@
 {
   "name": "roon-extension-itroxs",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Roon Extension for Android App it'roXs!",
   "main": "app.js",
+  "bin": "app.js",
   "author": "Boris Schaedler",
   "license": "MIT",
   "dependencies": {
+    "bufferutil": "^4.0.1",
     "debug": "^3.1.0",
     "node-cleanup": "^2.1.2",
     "node-roon-api": "github:roonlabs/node-roon-api",
@@ -14,7 +16,8 @@
     "node-roon-api-settings": "github:roonlabs/node-roon-api-settings",
     "node-roon-api-status": "github:roonlabs/node-roon-api-status",
     "node-roon-api-transport": "github:roonlabs/node-roon-api-transport",
-    "websocket": "^1.0.31"
+    "utf-8-validate": "^5.0.2",
+    "ws": "^7.3.0"
   },
   "repository": {
     "type": "git",
