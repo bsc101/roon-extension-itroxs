@@ -59,7 +59,9 @@ Main features of the **it'roXs** Android app:
 ## Installation (Method 2)
 
 If you don't want to install anything (e.g. node, git, ...), but prefer to simply run a single executable file, then this is the way to go! You can find the latest version of this extension as executable file here (Windows, macOS, Linux):
+
 [/itroxs/downloads/roon-extension-itroxs/latest](https://bsc101.eu/itroxs/downloads/roon-extension-itroxs/latest/)
+
 Check the sha256 fingerprint after downloading the executable to verify the download is correct ([sha256 fingerprints](https://bsc101.eu/itroxs/downloads/roon-extension-itroxs/latest/sha256.txt)).
 
 #### Windows
