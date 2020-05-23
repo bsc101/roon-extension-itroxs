@@ -17,7 +17,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.5.0';
+var ext_version = '0.5.1';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -26,7 +26,7 @@ init();
 
 function debug(msg)
 {
-    console.log('#itroxs: ' + msg);
+    console.log('#itroxs[' + Date.now() + ']: ' + msg);
 };
 
 var roon = new RoonApi({
@@ -99,6 +99,7 @@ function subscribe_zones()
         }
         else if (response == "Changed")
         {
+            let now = Date.now();
             let send = false;
 
             if (data.zones_changed)
@@ -138,7 +139,8 @@ function subscribe_zones()
                     {
                         if (e.zone_id == z.zone_id)
                         {
-                            if (Math.abs(z.seek_position - e.seek_position) > 1)
+                            if ((Math.abs(z.seek_position - e.seek_position) > 1) ||
+                                (Math.abs(now - e.timestamp) >= 1500))
                             {
                                 debug('zone_id:  ' + e.zone_id);
                                 debug('seek_pos: ' + e.seek_position + ' -> ' + z.seek_position);
@@ -151,7 +153,6 @@ function subscribe_zones()
 
             if (send)
             {
-                let now = Date.now();
                 let msgOut = {
                     command: 'zones_changed',
                     timestamp: now,
@@ -177,6 +178,7 @@ function subscribe_zones()
 
 function updateZonesSeek()
 {
+    let now = Date.now();
     roondata.zones_seek = [];
     roondata.zone_ids.forEach(zid => 
     {
@@ -184,6 +186,7 @@ function updateZonesSeek()
         if (zone == null) return;
         if (zone.now_playing == undefined) return;
         roondata.zones_seek.push({
+            timestamp: now,
             zone_id: zid,
             seek_position: zone.now_playing.seek_position,
             queue_time_remaining: zone.queue_time_remaining
