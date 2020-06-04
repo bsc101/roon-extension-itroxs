@@ -17,10 +17,12 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.5.1';
+var ext_version = '0.6.0';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
+
+var max_queue_items = 500;
 
 init();
 
@@ -75,6 +77,53 @@ var roon = new RoonApi({
     }
 });
 
+function queue_callback(_zone_id, response, data)
+{
+    debug('Q[' + _zone_id + ']: response = ' + response);
+    // debug('Q: data = ' + JSON.stringify(data));
+
+    if (response == "Subscribed")
+    {
+        roondata.queues.push({
+            zone_id: _zone_id,
+            items: data.items
+        });
+    }
+    else if (response == "Changed")
+    {
+        roondata.queues.forEach(q => 
+        {
+            if (q.zone_id == _zone_id)
+            {
+                data.changes.forEach(c => 
+                {
+                    debug('Q[' + _zone_id + ']: operation = ' + c.operation);
+
+                    if (c.operation == "remove")
+                    {
+                        debug('Q[' + _zone_id + ']: remove: index = ' + c.index + ', count = ' + c.count);
+                        q.items.splice(c.index, c.count);
+                        debug('Q[' + _zone_id + ']: remove> q.items.length = ' + q.items.length);
+                    }
+                    else if (c.operation == "insert")
+                    {
+                        debug('Q[' + _zone_id + ']: insert: index = ' + c.index + ', items.length = ' + c.items.length);
+                        q.items.splice(c.index, 0, ...c.items);
+                        debug('Q[' + _zone_id + ']: insert> q.items.length = ' + q.items.length);
+                    }
+                });
+                let msgOut = {
+                    command: 'queue_changed',
+                    timestamp: Date.now(),
+                    queue_zone_id: _zone_id,
+                    max_queue_items: max_queue_items
+                };
+                service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
+            }
+        });
+    }
+}
+
 function subscribe_zones()
 {
     if (!roondata.transport) return;
@@ -89,11 +138,22 @@ function subscribe_zones()
         {
             roondata.zone_ids = [];
             roondata.zones_seek = [];
+            roondata.queues = [];
+            roondata.queue_zone_ids = [];
 
             data.zones.forEach(e => roondata.zone_ids.push(e.zone_id));
             debug("zone_ids = " + roondata.zone_ids.toString())
 
             updateZonesSeek();
+
+            data.zones.forEach(e => 
+            {
+                roondata.transport.subscribe_queue(e.zone_id, max_queue_items, function(r, d)
+                {
+                    queue_callback(e.zone_id, r, d);
+                });
+                roondata.queue_zone_ids.push(e.zone_id);
+            });
 
             start_service();
         }
@@ -113,7 +173,17 @@ function subscribe_zones()
                 data.zones_added.forEach(e => 
                 {
                     if (!roondata.zone_ids.includes(e.zone_id))
+                    {
                         roondata.zone_ids.push(e.zone_id)
+                    }
+                    if (!roondata.queue_zone_ids.includes(e.zone_id))
+                    {
+                        roondata.transport.subscribe_queue(e.zone_id, max_queue_items, function(r, d)
+                        {
+                            queue_callback(e.zone_id, r, d);
+                        });
+                        roondata.queue_zone_ids.push(e.zone_id);
+                    }
                 });
             }
 
@@ -388,7 +458,8 @@ function handleMessageIn(conn, msgIn)
                         image: {
                             image_key: msgIn.image_key,
                             content_type: contentType,
-                            body: body
+                            body: body,
+                            image_tag: msgIn.image_tag
                         }
                     };
                     conn.send(JSON.stringify(msgOut));
@@ -431,6 +502,32 @@ function handleMessageIn(conn, msgIn)
                     msgOut.zones.push(zone);
                 }
                 conn.send(JSON.stringify(msgOut));
+            }
+            break;
+
+        case "get_queue":
+            {
+                let msgOut = {
+                    command: 'queue_changed',
+                    timestamp: Date.now(),
+                    queue_zone_id: msgIn.zone_id,
+                    max_queue_items: max_queue_items,
+                    queue_items: []
+                };
+                roondata.queues.forEach(q => 
+                {
+                    if (q.zone_id == msgIn.zone_id)
+                    {
+                        msgOut.queue_items = q.items;
+                    }
+                });
+                conn.send(JSON.stringify(msgOut));
+            }
+            break;
+
+        case "play_from_here":
+            {
+                roondata.transport.play_from_here(msgIn.zone_id, msgIn.queue_item_id);
             }
             break;
 
