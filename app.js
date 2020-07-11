@@ -17,7 +17,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '0.6.0';
+var ext_version = '1.0.1';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -140,11 +140,12 @@ function subscribe_zones()
             roondata.zones_seek = [];
             roondata.queues = [];
             roondata.queue_zone_ids = [];
+            roondata.output_data = [];
 
             data.zones.forEach(e => roondata.zone_ids.push(e.zone_id));
             debug("zone_ids = " + roondata.zone_ids.toString())
 
-            updateZonesSeek();
+            update_zones_seek();
 
             data.zones.forEach(e => 
             {
@@ -235,18 +236,108 @@ function subscribe_zones()
                     {
                         let zone = roondata.transport.zone_by_zone_id(zid);
                         zone.timestamp = now;
+                        apply_output_additional_data(zone);
                         msgOut.zones.push(zone);
                     });
                 }
                 service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
             }
 
-            updateZonesSeek();
+            update_zones_seek();
         }
     });
 }
 
-function updateZonesSeek()
+function zone_by_output_id(output_id)
+{
+    for (var zone_id of roondata.zone_ids)
+    {
+        let zone = roondata.transport.zone_by_zone_id(zone_id);
+        for (var o of zone.outputs)
+        {
+            if (o.output_id == output_id)
+                return zone;
+        }
+    }
+    return null;
+}
+
+function check_timer(zone_id)
+{
+    let zone = roondata.transport.zone_by_zone_id(zone_id);
+    if (zone.outputs)
+    {
+        let now = Date.now();
+        zone.outputs.forEach(o => 
+        {
+            roondata.output_data.forEach(odata => 
+            {
+                if (odata.output_id == o.output_id)
+                {
+                    if (odata.sleep_timer && odata.sleep_timer.time > 0 && now > odata.sleep_timer.time && (now - odata.sleep_timer.time) < 5000)
+                    {
+                        debug('>>> sleep timer: output_id = ' + odata.output_id);
+                        debug('>>> sleep timer: standby = ' + odata.sleep_timer.standby);
+                        debug('>>> sleep timer: fadeout = ' + odata.sleep_timer.fadeout);
+
+                        odata.sleep_timer.time = -odata.sleep_timer.time;
+                        sleep(odata.output_id, odata.sleep_timer.standby, odata.sleep_timer.fadeout, 0);
+                    }
+                }
+            });
+        });
+    }
+}
+
+function sleep(output_id, standby, fadeout, counter)
+{
+    let cancel = false;
+    roondata.output_data.forEach(odata => 
+    {
+        if (odata.output_id == output_id)
+        {
+            if (odata.sleep_timer && odata.sleep_timer.time == 0)
+                cancel = true;
+        }
+    });
+    if (cancel)
+        return;
+
+    if (fadeout && counter < 75)
+    {
+        let zone = zone_by_output_id(output_id);
+        if (zone.outputs)
+        {
+            if (counter > 0)
+            {
+                zone.outputs.forEach(o => 
+                {
+                    roondata.transport.change_volume(o.output_id, 'relative', -1);
+                });
+            }
+            setTimeout(() => 
+            {
+                sleep(output_id, standby, fadeout, counter + 1);
+            }, 400);
+            return;
+        }
+    }
+
+    setTimeout(() => 
+    {
+        let zone = zone_by_output_id(output_id);
+        roondata.transport.control(zone.zone_id, "pause");
+        if (standby && zone.outputs)
+        {
+            zone.outputs.forEach(o => 
+            {
+                roondata.transport.standby(o.output_id, {});
+            });
+        }
+    }, 100);
+}
+
+function update_zones_seek()
 {
     let now = Date.now();
     roondata.zones_seek = [];
@@ -337,6 +428,11 @@ function init()
 
 function stop_service()
 {
+    if (service.check_things_timer)
+    {
+        clearTimeout(service.check_things_timer);
+        service.check_things_timer = null;
+    }
     if (service.keep_alive_timer)
     {
         clearTimeout(service.keep_alive_timer)
@@ -374,6 +470,16 @@ function keep_alive()
     }
 }
 
+function check_things()
+{
+    if (roondata.transport && roondata.zone_ids)
+    {
+        roondata.zone_ids.forEach(zone_id => check_timer(zone_id));
+    }
+
+    service.check_things_timer = setTimeout(check_things, 1000);
+}
+
 function start_service() 
 {
     stop_service();
@@ -381,6 +487,7 @@ function start_service()
     if (!mysettings.port)
         return;
 
+    service.check_things_timer = setTimeout(check_things, 1000);
     // service.keep_alive_timer = setTimeout(keep_alive, 10000);
 
     debug('starting websocketserver...');
@@ -400,7 +507,7 @@ function start_service()
             debug('WS: received: ' + message);
 
             let msgIn = JSON.parse(message);
-            handleMessageIn(conn, msgIn);
+            handle_message_in(conn, msgIn);
         });
         conn.on('close', () => 
         {
@@ -432,6 +539,7 @@ function start_service()
             {
                 let zone = roondata.transport.zone_by_zone_id(zid);
                 zone.timestamp = now;
+                apply_output_additional_data(zone);
                 msgOut.zones.push(zone);
             });
         }
@@ -443,7 +551,35 @@ function start_service()
     debug('starting websocketserver... done');
 }
 
-function handleMessageIn(conn, msgIn)
+function apply_output_additional_data(zone)
+{
+    if (!zone.outputs)
+    {
+        return;
+    }
+    
+    zone.outputs.forEach(o => 
+    {
+        o.sleep_timer = {
+            time: 0,
+            standby: false,
+            fadeout: false
+        };
+
+        roondata.output_data.forEach(odata =>
+        {
+            if (odata.output_id == o.output_id)
+            {
+                if (odata.sleep_timer)
+                {
+                    o.sleep_timer = odata.sleep_timer;
+                }
+            }
+        });
+    });
+}
+
+function handle_message_in(conn, msgIn)
 {
     switch (msgIn.command)
     {
@@ -487,6 +623,50 @@ function handleMessageIn(conn, msgIn)
                 roondata.transport.change_volume(e.output_id, 'absolute', e.value);
             });
             break;
+
+        case "set_timer":
+            {
+                if (msgIn.sleep_timer)
+                {
+                    debug('set_timer: output_id = ' + msgIn.output_id);
+                    debug('set_timer: sleep_timer.time    = ' + msgIn.sleep_timer.time);
+                    debug('set_timer: sleep_timer.standby = ' + msgIn.sleep_timer.standby);
+                    debug('set_timer: sleep_timer.fadeout = ' + msgIn.sleep_timer.fadeout);
+                    let found = false;
+                    roondata.output_data.forEach(o =>
+                    {
+                        if (o.output_id == msgIn.output_id)
+                        {
+                            o.sleep_timer = msgIn.sleep_timer;
+                            found = true;
+                        }
+                    });
+                    if (!found)
+                    {
+                        roondata.output_data.push({
+                            output_id: msgIn.output_id,
+                            sleep_timer: msgIn.sleep_timer
+                        });
+                    }
+                    if (service.connections)
+                    {
+                        let msgOut = {
+                            command: 'zones_changed',
+                            timestamp: Date.now(),
+                            zones: []
+                        };
+                        let zone = zone_by_output_id(msgIn.output_id);
+                        if (zone)
+                        {
+                            zone.timestamp = Date.now();
+                            apply_output_additional_data(zone);
+                            msgOut.zones.push(zone);
+                        }
+                        service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
+                    }
+                }
+            }
+            break;
     
         case "get_zone":
             {
@@ -498,7 +678,8 @@ function handleMessageIn(conn, msgIn)
                 let zone = roondata.transport.zone_by_zone_id(msgIn.zone_id);
                 if (zone)
                 {
-                    zone.timestamp = Date.now(),
+                    zone.timestamp = Date.now();
+                    apply_output_additional_data(zone);
                     msgOut.zones.push(zone);
                 }
                 conn.send(JSON.stringify(msgOut));
