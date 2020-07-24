@@ -9,15 +9,44 @@ var RoonApi          = require('node-roon-api'),
 
 var nodeCleanup      = require('node-cleanup');
 var WebSocket        = require('ws');
+var https            = require('https');
+const { Buffer }     = require('buffer');
 
 var service = {};
 var roondata = {};
+
+var radioparadise = {
+    mainmix: {
+        channel: 'main',
+        title: '[RP Main Mix]',
+        url: 'https://api.radioparadise.com/api/now_playing?chan=0',
+        image_key_prefix: 'radioparadise.mainmix.'
+    },
+    mellowmix: {
+        channel: 'mellow',
+        title: '[RP Mellow Mix]',
+        url: 'https://api.radioparadise.com/api/now_playing?chan=1',
+        image_key_prefix: 'radioparadise.mellowmix.'
+    },
+    rockmix: {
+        channel: 'rock',
+        title: '[RP Rock Mix]',
+        url: 'https://api.radioparadise.com/api/now_playing?chan=2',
+        image_key_prefix: 'radioparadise.rockmix.'
+    },
+    worldmix: {
+        channel: 'world',
+        title: '[RP World/Etc Mix]',
+        url: 'https://api.radioparadise.com/api/now_playing?chan=3',
+        image_key_prefix: 'radioparadise.worldmix.'
+    }
+};
 
 var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.1';
+var ext_version = '1.0.3';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -236,7 +265,7 @@ function subscribe_zones()
                     {
                         let zone = roondata.transport.zone_by_zone_id(zid);
                         zone.timestamp = now;
-                        apply_output_additional_data(zone);
+                        apply_additional_zone_data(zone);
                         msgOut.zones.push(zone);
                     });
                 }
@@ -356,8 +385,13 @@ function update_zones_seek()
 }
 
 var mysettings = roon.load_config("settings" + instance) || {
-    port: "8090"
+    port: "8090",
+    radio_paradise: true
 };
+if (typeof(mysettings.radio_paradise) === 'undefined')
+{
+    mysettings.radio_paradise = true;
+}
 
 function make_layout(settings) {
     var l = {
@@ -372,6 +406,16 @@ function make_layout(settings) {
         subtitle:  "This extensions server listening port (e.g. 8090)",
         maxlength: 5,
         setting:   "port"
+    });
+    l.layout.push({
+        type:      "dropdown",
+        title:     "Radio Paradise",
+        subtitle:  "Enable Radio Paradise metadata handling",
+        values:  [
+            { title: "Yes", value: true },
+            { title: "No",   value: false  }
+        ],
+        setting:   "radio_paradise"
     });
 
     return l;
@@ -402,7 +446,7 @@ var svc_settings = new RoonApiSettings(roon, {
 var svc_status = new RoonApiStatus(roon);
 
 roon.init_services({
-    required_services: [ RoonApiTransport, RoonApiImage ],
+    required_services: [ RoonApiTransport, RoonApiImage, RoonApiBrowse ],
     provided_services: [ svc_status, svc_settings ]
 });
 
@@ -470,12 +514,153 @@ function keep_alive()
     }
 }
 
+function is_line_radioparadise(line, channel)
+{
+    let rp = false;
+    if (line)
+    {
+        rp = 
+            (line.toLowerCase().search('radio paradise') >= 0) &&
+            (line.toLowerCase().search(channel) >= 0) ||
+            (line.toLowerCase().search('rp ' + channel) >= 0);
+    }
+    return rp;
+}
+
+function is_radioparadise(zone, channel)
+{
+    if (!mysettings.radio_paradise)
+        return false;
+
+    if (zone.now_playing)
+    {
+        if (zone.now_playing.one_line && 
+            is_line_radioparadise(zone.now_playing.one_line.line1, channel))
+        {
+            return true;
+        }
+        if (zone.now_playing.two_line && (
+            is_line_radioparadise(zone.now_playing.two_line.line1, channel) || 
+            is_line_radioparadise(zone.now_playing.two_line.line2, channel)))
+        {
+            return true;
+        }
+        if (zone.now_playing.three_line && (
+            is_line_radioparadise(zone.now_playing.three_line.line1, channel) || 
+            is_line_radioparadise(zone.now_playing.three_line.line2, channel) || 
+            is_line_radioparadise(zone.now_playing.three_line.line3, channel)))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function update_radioparadise_zones(channel)
+{
+    let now = Date.now();
+    let msgOut = {
+        command: 'zones_changed',
+        timestamp: now,
+        zones: []
+    };
+    if (roondata.zone_ids)
+    {
+        roondata.zone_ids.forEach(zid => 
+        {
+            let zone = roondata.transport.zone_by_zone_id(zid);
+            if (is_radioparadise(zone, channel))
+            {
+                zone.timestamp = now;
+                apply_additional_zone_data(zone);
+                msgOut.zones.push(zone);
+            }
+        });
+    }
+    service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
+}
+
+function check_radioparadise(rp)
+{
+    let now = Date.now();
+    let do_request = false;
+    if (!rp.now_playing && !rp.last_request)
+    {
+        do_request = true;
+    }
+    else if (rp.next_request)
+    {
+        if (now >= rp.next_request && now >= rp.last_request+3000)
+        {
+            do_request = true;
+        }
+    }
+    if (do_request)
+    {
+        rp.last_request = now;
+
+        https.get(rp.url, (resp) => 
+        {
+            let data = '';
+            resp.on('data', (chunk) => data += chunk);
+            resp.on('end', () => 
+            {
+                if (resp.statusCode == 200)
+                {
+                    debug(rp.title + ' data = ' + data);
+                    rp.now_playing = JSON.parse(data);
+                    rp.next_request = now + (rp.now_playing.time+2) * 1000;
+    
+                    https.get(rp.now_playing.cover, (resp) => 
+                    {
+                        let body = [];
+                        resp.on('data', (chunk) => body.push(chunk));
+                        resp.on('end', () => 
+                        {
+                            if (resp.statusCode == 200)
+                            {
+                                let image = Buffer.concat(body);
+                                debug('image.length = ' + image.length);
+                                rp.now_playing.image = image;
+                                update_radioparadise_zones(rp.channel);
+                            }
+                            else
+                            {
+                                debug('resp.statusCode = ' + resp.statusCode);
+                                rp.now_playing.image = null;
+                                update_radioparadise_zones(rp.channel);
+                            }
+                        });
+                    }).on("error", (err) => 
+                    {
+                        rp.now_playing.image = null;
+                        update_radioparadise_zones(rp.channel);
+                    });
+                }
+                else
+                {
+                    rp.now_playing = null;
+                }
+            });
+        }).on("error", (err) => 
+        {
+            rp.now_playing = null;
+        });
+    }
+}
+
 function check_things()
 {
     if (roondata.transport && roondata.zone_ids)
     {
         roondata.zone_ids.forEach(zone_id => check_timer(zone_id));
     }
+
+    check_radioparadise(radioparadise.mainmix);
+    check_radioparadise(radioparadise.mellowmix);
+    check_radioparadise(radioparadise.rockmix);
+    check_radioparadise(radioparadise.worldmix);
 
     service.check_things_timer = setTimeout(check_things, 1000);
 }
@@ -539,7 +724,7 @@ function start_service()
             {
                 let zone = roondata.transport.zone_by_zone_id(zid);
                 zone.timestamp = now;
-                apply_output_additional_data(zone);
+                apply_additional_zone_data(zone);
                 msgOut.zones.push(zone);
             });
         }
@@ -551,8 +736,45 @@ function start_service()
     debug('starting websocketserver... done');
 }
 
-function apply_output_additional_data(zone)
+function apply_radioparadise_to_zone(zone, rp)
 {
+    if (is_radioparadise(zone, rp.channel))
+    {
+        if (rp.now_playing)
+        {
+            zone.now_playing.one_line.line1 = rp.now_playing.title + '\n' + rp.title;
+    
+            zone.now_playing.two_line.line1 = rp.now_playing.title;
+            zone.now_playing.two_line.line2 = rp.now_playing.artist + '\n' + rp.title;
+    
+            zone.now_playing.three_line.line1 = rp.now_playing.title;
+            zone.now_playing.three_line.line2 = rp.now_playing.artist;
+            zone.now_playing.three_line.line3 = rp.now_playing.album + ' (' + rp.now_playing.year + ')' + '\n' + rp.title;
+
+            if (!zone.now_playing.image_key.startsWith(rp.image_key_prefix))
+            {
+                rp.image_key = zone.now_playing.image_key;
+                debug('rp.image_key = ' + rp.image_key);
+            }
+
+            if (rp.now_playing.image)
+            {
+                zone.now_playing.image_key = rp.image_key_prefix + rp.now_playing.cover;
+            }
+        }
+    }
+}
+
+function apply_additional_zone_data(zone)
+{
+    if (zone.now_playing)
+    {
+        apply_radioparadise_to_zone(zone, radioparadise.mainmix);
+        apply_radioparadise_to_zone(zone, radioparadise.mellowmix);
+        apply_radioparadise_to_zone(zone, radioparadise.rockmix);
+        apply_radioparadise_to_zone(zone, radioparadise.worldmix);
+    }
+
     if (!zone.outputs)
     {
         return;
@@ -579,12 +801,48 @@ function apply_output_additional_data(zone)
     });
 }
 
+function get_image_radioparadise(msgIn, rp)
+{
+    if (msgIn.image_key.startsWith(rp.image_key_prefix))
+    {
+        msgIn.image_key = rp.image_key;
+        if (rp.now_playing && rp.now_playing.image)
+            return rp.now_playing.image;
+    }
+
+    return null;
+}
+
+function get_image_radio(msgIn)
+{
+    let image = get_image_radioparadise(msgIn, radioparadise.mainmix);
+    if (image)
+        return image;
+
+    image = get_image_radioparadise(msgIn, radioparadise.mellowmix);
+    if (image)
+        return image;
+
+    image = get_image_radioparadise(msgIn, radioparadise.rockmix);
+    if (image)
+        return image;
+            
+    image = get_image_radioparadise(msgIn, radioparadise.worldmix);
+    if (image)
+        return image;
+    
+    return null;
+}
+
 function handle_message_in(conn, msgIn)
 {
     switch (msgIn.command)
     {
         case "get_image":
             {
+                let image_key = msgIn.image_key;
+                let unscaled = get_image_radio(msgIn);
+
                 let size = msgIn.image_size || 256;
                 roondata.image.get_image(msgIn.image_key, { scale: "fit", width: size, height: size, format: "image/jpeg" }, function(msg, contentType, body)
                 {
@@ -592,9 +850,10 @@ function handle_message_in(conn, msgIn)
                         command: 'set_image',
                         timestamp: Date.now(),
                         image: {
-                            image_key: msgIn.image_key,
+                            image_key: image_key,
                             content_type: contentType,
                             body: body,
+                            unscaled: unscaled,
                             image_tag: msgIn.image_tag
                         }
                     };
@@ -659,7 +918,7 @@ function handle_message_in(conn, msgIn)
                         if (zone)
                         {
                             zone.timestamp = Date.now();
-                            apply_output_additional_data(zone);
+                            apply_additional_zone_data(zone);
                             msgOut.zones.push(zone);
                         }
                         service.connections.forEach(c => c.send(JSON.stringify(msgOut)));
@@ -679,7 +938,7 @@ function handle_message_in(conn, msgIn)
                 if (zone)
                 {
                     zone.timestamp = Date.now();
-                    apply_output_additional_data(zone);
+                    apply_additional_zone_data(zone);
                     msgOut.zones.push(zone);
                 }
                 conn.send(JSON.stringify(msgOut));
