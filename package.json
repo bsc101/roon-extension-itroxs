@@ -1,11 +1,14 @@
 {
   "name": "roon-extension-itroxs",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Roon Extension for Android App it'roXs!",
   "main": "app.js",
   "bin": "app.js",
   "author": "Boris Schaedler",
   "license": "MIT",
+  "pkg": {
+    "scripts": "itroxs.js"
+  },
   "dependencies": {
     "debug": "^3.1.0",
     "node-cleanup": "^2.1.2",
