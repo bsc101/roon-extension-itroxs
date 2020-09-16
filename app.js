@@ -7,6 +7,7 @@ const { fork }  = require('child_process');
 
 var is_pkg = false;
 var snapshot_basedir = '';
+var child_proc = null;
 
 init();
 
@@ -41,11 +42,11 @@ function run_itroxs()
     {
         itroxs_js = 'roon-extension-itroxs/itroxs.js';
     }
-    var child = fork(itroxs_js);
-    child.on('close', (code) => 
+    child_proc = fork(itroxs_js);
+    child_proc.on('close', (code) => 
     {
         var uptime = Date.now() - now;
-        debug(`child process exited with code ${code}, uptime = ${uptime}`);
+        debug(`child proc exited with code ${code}, uptime = ${uptime}`);
         var delay = 3000;
         if (uptime < 57000)
         {
@@ -53,12 +54,19 @@ function run_itroxs()
         }
         debug(`waiting ${delay} ms...`);
         setTimeout(() => run_itroxs(), delay);
+        child_proc = null;
     });
 }
 
 nodeCleanup(function (exitCode, signal)
 {
     debug("cleanup...");
+
+    if (child_proc)
+    {
+        debug('terminating child proc...');
+        child_proc.kill();
+    }
 
     if (is_pkg)
     {
