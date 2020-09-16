@@ -81,28 +81,28 @@ nodeCleanup(function (exitCode, signal)
 
 var rmdir = function(dir) 
 {
-	var list = fs.readdirSync(dir);
+    var list = fs.readdirSync(dir);
     for (var i = 0; i < list.length; i++) 
     {
-		var filename = path.join(dir, list[i]);
-		var stat = fs.statSync(filename);
-		
+        var filename = path.join(dir, list[i]);
+        var stat = fs.statSync(filename);
+
         if (filename == "." || filename == "..") 
         {
-			// pass these files
+            // pass these files
         } 
         else if (stat.isDirectory()) 
         {
-			// rmdir recursively
-			rmdir(filename);
+            // rmdir recursively
+            rmdir(filename);
         } 
         else 
         {
-			// rm filename
-			fs.unlinkSync(filename);
-		}
-	}
-	fs.rmdirSync(dir);
+            // rm filename
+            fs.unlinkSync(filename);
+        }
+    }
+    fs.rmdirSync(dir);
 };
 
 function extract_snapshot(dir)
