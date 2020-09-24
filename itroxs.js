@@ -11,6 +11,7 @@ var nodeCleanup      = require('node-cleanup');
 var WebSocket        = require('ws');
 var https            = require('https');
 const { Buffer }     = require('buffer');
+const fs             = require('fs');
 
 var service = {};
 var roondata = {};
@@ -46,7 +47,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.4';
+var ext_version = '1.0.5';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -59,6 +60,21 @@ function debug(msg)
 {
     console.log('#ext[' + Date.now() + ']: ' + msg);
 };
+
+process.on('uncaughtException', (err) => 
+{
+    debug('UncaughtException:');
+    debug(err.stack);
+
+    let ex = 
+    {
+        timestamp: Date.now(),
+        stack: err.stack
+    };
+    fs.writeFileSync('exception.txt', JSON.stringify(ex));
+
+    process.exit(1) //mandatory (as per the Node docs)
+});
 
 var roon = new RoonApi({
     extension_id:        ext_id + instance,
@@ -712,12 +728,20 @@ function start_service()
             }
         });
 
+        let ex = {};
+        if (fs.existsSync('exception.txt'))
+        {
+            var jex = fs.readFileSync('exception.txt').toString();
+            ex = JSON.parse(jex);
+        }
+
         let now = Date.now();
         let msgOut = {
             command: 'welcome',
             timestamp: now,
             extension_id: ext_id + instance,
             version: ext_version,
+            exception: ex,
             zones: []
         };
         if (roondata.zone_ids)
@@ -1027,7 +1051,6 @@ function handle_message_in(conn, msgIn)
 nodeCleanup(function (exitCode, signal)
 {
     debug("cleanup...");
-
     debug("cleanup... done");
 });
 
