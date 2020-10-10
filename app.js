@@ -52,6 +52,11 @@ function run_itroxs()
         {
             delay = 60000 - uptime;
         }
+        if (code == 101) // restart
+        {
+            debug('restarting...');
+            delay = 1000;
+        }
         debug(`waiting ${delay} ms...`);
         setTimeout(() => run_itroxs(), delay);
         child_proc = null;

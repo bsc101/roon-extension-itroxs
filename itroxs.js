@@ -47,7 +47,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.5';
+var ext_version = '1.0.6';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -614,9 +614,10 @@ function check_radioparadise(rp)
             do_request = true;
         }
     }
-    if (do_request)
+    if (do_request && !rp.requesting)
     {
         rp.last_request = now;
+        rp.requesting = true;
 
         https.get(rp.url, (resp) => 
         {
@@ -636,34 +637,40 @@ function check_radioparadise(rp)
                         resp.on('data', (chunk) => body.push(chunk));
                         resp.on('end', () => 
                         {
-                            if (resp.statusCode == 200)
+                            if (rp.now_playing)
                             {
-                                let image = Buffer.concat(body);
-                                debug('image.length = ' + image.length);
-                                rp.now_playing.image = image;
-                                update_radioparadise_zones(rp.channel);
+                                if (resp.statusCode == 200)
+                                {
+                                    let image = Buffer.concat(body);
+                                    debug('image.length = ' + image.length);
+                                    rp.now_playing.image = image;
+                                }
+                                else
+                                {
+                                    debug('resp.statusCode = ' + resp.statusCode);
+                                    rp.now_playing.image = null;
+                                }
                             }
-                            else
-                            {
-                                debug('resp.statusCode = ' + resp.statusCode);
-                                rp.now_playing.image = null;
-                                update_radioparadise_zones(rp.channel);
-                            }
+                            update_radioparadise_zones(rp.channel);
+                            rp.requesting = false;
                         });
                     }).on("error", (err) => 
                     {
                         rp.now_playing.image = null;
                         update_radioparadise_zones(rp.channel);
+                        rp.requesting = false;
                     });
                 }
                 else
                 {
                     rp.now_playing = null;
+                    rp.requesting = false;
                 }
             });
         }).on("error", (err) => 
         {
             rp.now_playing = null;
+            rp.requesting = false;
         });
     }
 }
@@ -1044,6 +1051,10 @@ function handle_message_in(conn, msgIn)
 
         case "standby":
             roondata.transport.standby(msgIn.output_id, {});
+            break;
+
+        case "restart":
+            process.exit(101);
             break;
     }
 }
