@@ -47,7 +47,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.6';
+var ext_version = '1.0.7';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -77,12 +77,13 @@ process.on('uncaughtException', (err) =>
 });
 
 var roon = new RoonApi({
-    extension_id:        ext_id + instance,
-    display_name:        "Extension for Android App it'roXs!" + instance_display_name,
-    display_version:     ext_version,
-    publisher:           'Boris Schaedler',
-    email:               'dev@bsc101.eu',
-    website:             'https://github.com/bsc101/roon-extension-itroxs',
+    extension_id:    ext_id + instance,
+    display_name:    "Extension for Android App it'roXs!" + instance_display_name,
+    display_version: ext_version,
+    publisher:       'Boris Schaedler',
+    email:           'dev@bsc101.eu',
+    website:         'https://github.com/bsc101/roon-extension-itroxs',
+    log_level:       'none',
     set_persisted_state: function(state)
     {
         this.save_config("roonstate" + instance, state);
@@ -1030,6 +1031,49 @@ function handle_message_in(conn, msgIn)
                     settings.auto_radio = msgIn.settings_radio.auto_radio;
                 }
                 roondata.transport.change_settings(msgIn.zone_id, settings);
+            }
+            break;
+
+        case "browse":
+            {
+                // console.log(`*** browse_options = ${JSON.stringify(msgIn.browse_options)}`);
+                roondata.browse.browse(msgIn.browse_options, (err, body) => 
+                {
+                    // console.log(`*** err = ${err}`)
+                    // console.log(`*** body = ${JSON.stringify(body)}`);
+                });
+            }
+            break;
+
+        case "browse_and_load":
+            {
+                // console.log(`*** browse_options = ${JSON.stringify(msgIn.browse_options)}`);
+                roondata.browse.browse(msgIn.browse_options, (err, body) => 
+                {
+                    // console.log(`*** err = ${err}`)
+                    // console.log(`*** body = ${JSON.stringify(body)}`);
+                    if (!err)
+                    {
+                        roondata.browse.load(
+                        {
+                            hierarchy: msgIn.browse_options.hierarchy
+                        }, (err, body) => 
+                        {
+                            // console.log(`*** err = ${err}`)
+                            // console.log(`*** body = ${JSON.stringify(body)}`);
+                            if (!err)
+                            {
+                                let msgOut = {
+                                    command: 'load_result',
+                                    timestamp: Date.now(),
+                                    tag: msgIn.tag,
+                                    load_result: body
+                                };
+                                conn.send(JSON.stringify(msgOut));
+                            }
+                        });
+                    }
+                });
             }
             break;
 
