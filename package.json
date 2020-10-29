@@ -1,6 +1,6 @@
 {
   "name": "roon-extension-itroxs",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Roon Extension for Android App it'roXs!",
   "main": "app.js",
   "bin": "app.js",
