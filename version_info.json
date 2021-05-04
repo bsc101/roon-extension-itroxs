@@ -1,16 +1,16 @@
 {
-  "version": "1.0.8",
-  "v1": 1, "v2": 0, "v3": 8, "v4": 0,
+  "version": "1.0.9",
+  "v1": 1, "v2": 0, "v3": 9, "v4": 0,
   "roon-extension-itroxs-linux": {
-    "size": 40423613,
-    "sha256": "7170d986d1edec0a590e98c849d816da4a5ef4f46a089268b9c23e6af32afbe8"
+    "size": 40399344,
+    "sha256": "1f6e747e9c622a4d5182fb4c88794ab1ecb05624e7aadb2585ed41bec0d00e51"
   },
   "roon-extension-itroxs-macos": {
-    "size": 41437057,
-    "sha256": "dfdb11eedbc4bb7e6c841d1dd4a2512c16add204bfeac60c438b564ec17f9c46"
+    "size": 41412788,
+    "sha256": "e71336d578194a22beb3ce4bac54ef605cf57dd5967959a5e54e2ce8750affdc"
   },
   "roon-extension-itroxs-win.exe": {
-    "size": 36705298,
-    "sha256": "9b14d70c8208f22824d8cf3797de4a06cada0d67bbc1dde91278f40a2d3511a4"
+    "size": 36681014,
+    "sha256": "e23efa429e07f022081030409cd1a733927eb0765eee2ab75816bee1e902f1f8"
   }
 }

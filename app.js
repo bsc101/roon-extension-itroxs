@@ -11,7 +11,7 @@ var is_pkg = false;
 var snapshot_basedir = '';
 var child_proc = null;
 
-var ext_version = '1.0.8';
+var ext_version = '1.0.9';
 var ext_base_url = 'https://bsc101.eu/itroxs/downloads/roon-extension-itroxs/latest/';
 var ext_latest_version_url = 'https://bsc101.eu/itroxs/downloads/roon-extension-itroxs/latest/version_info.json';
 var ext_latest_version = {};

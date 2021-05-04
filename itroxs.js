@@ -47,7 +47,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.8';
+var ext_version = '1.0.9';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;
@@ -1031,6 +1031,12 @@ function handle_message_in(conn, msgIn)
                     settings.auto_radio = msgIn.settings_radio.auto_radio;
                 }
                 roondata.transport.change_settings(msgIn.zone_id, settings);
+            }
+            break;
+
+        case "transfer_zone":
+            {
+                roondata.transport.transfer_zone(msgIn.zone_id, msgIn.zone_id_dest);
             }
             break;
 
