@@ -47,7 +47,7 @@ var instance = "";
 var instance_display_name = "";
 
 var ext_id      = 'com.bsc101.itroxs';
-var ext_version = '1.0.9';
+var ext_version = '1.0.10';
 
 var subscribe_delay = 1000;
 var subscribe_timer = null;

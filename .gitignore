@@ -2,3 +2,5 @@ config.json
 node_modules
 package-lock.json
 .DS_Store
+.reg/bin
+.reg/etc
