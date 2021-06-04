@@ -27,6 +27,8 @@ function debug(msg)
 
 function init()
 {
+    init_signal_handlers();
+
     process.argv.forEach(function (val, index, array)
     {
         debug(index + ': ' + val);
@@ -46,6 +48,16 @@ function init()
         }
     });
     debug(`check_updates = ${check_updates}`);
+}
+
+function init_signal_handlers() {
+    const handle = function(signal) {
+        process.exit(0);
+    };
+
+    // Register signal handlers to enable a graceful stop of the container
+    process.on('SIGTERM', handle);
+    process.on('SIGINT', handle);
 }
 
 function run_itroxs()
